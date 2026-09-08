@@ -1,0 +1,300 @@
+import React, { useState, useRef, useEffect } from 'react';
+import Avatar from './Avatar';
+import { CheckIcon, CopyIcon, LinkIcon, LockIcon } from './Icons';
+import { ROLE_SUMMARY_MAP, getPersonaRoleKey, highlightIOCs } from '@/lib/constants';
+
+export default function ChatPanel({
+  messages = [],
+  persona,
+  isThinking = false,
+  thinkingStep = "Checking patterns...",
+  isLoading = false,
+  onSendMessage,
+  onPasteTemplate
+}) {
+  const [inputText, setInputText] = useState('');
+  const [copiedId, setCopiedId] = useState(null);
+  const messagesEndRef = useRef(null);
+  const chatMessagesContainerRef = useRef(null);
+  const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
+
+  // Auto-scroll on new messages or typing
+  useEffect(() => {
+    if (!isUserScrolledUp) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, isThinking, isUserScrolledUp]);
+
+  const handleScroll = () => {
+    const el = chatMessagesContainerRef.current;
+    if (!el) return;
+    const isScrolled = el.scrollHeight - el.scrollTop - el.clientHeight > 80;
+    setIsUserScrolledUp(isScrolled);
+  };
+
+  const handleSend = () => {
+    const trimmed = inputText.trim();
+    if (!trimmed || isLoading) return;
+    onSendMessage(trimmed);
+    setInputText('');
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  const handleCopy = (text, idx) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedId(idx);
+      setTimeout(() => setCopiedId(null), 1500);
+    });
+  };
+
+  const hasMessages = messages && messages.length > 0;
+  const isAssigned = persona && persona.name && persona.name !== "—" && persona.name !== "Not Assigned";
+  const roleKey = getPersonaRoleKey(persona?.occupation);
+  const personaSummary = ROLE_SUMMARY_MAP[roleKey] || "An undercover proxy setup. Routes dialogue to analyze threat patterns.";
+  const turnCount = messages.length / 2;
+  const trust = turnCount > 2 ? "Established" : (turnCount > 0 ? "Building" : "Neutral");
+  const trustClass = turnCount > 2 ? "text-brand" : (turnCount > 0 ? "text-warning" : "");
+
+  return (
+    <div className="chat-panel">
+      {/* Header */}
+      <div className="chat-header">
+        <div className="chat-header-left">
+          <div className="live-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+            </svg>
+          </div>
+          <div className="chat-title">
+            <h3>Live Undercover Chat</h3>
+            <p id="chatSubtitle">Honeypot channel interacting with target risk signature</p>
+          </div>
+        </div>
+        <div className="chat-chips">
+          <div className="chip green">
+            <div className="chip-dot" /> Auto Mode
+          </div>
+          <div className="chip">
+            <LockIcon style={{ width: 13, height: 13, strokeWidth: 2.2 }} />
+            Secure Channel
+          </div>
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div
+        className="chat-messages"
+        id="chatMessages"
+        ref={chatMessagesContainerRef}
+        onScroll={handleScroll}
+      >
+        {!hasMessages ? (
+          <div className="chat-empty-state" id="chatEmptyState">
+            <div className="empty-icon-wrap">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+            </div>
+            <h3>Initiate Undercover Trace</h3>
+            <p>Paste the suspicious message payload or threat notification context below to select and generate a dynamic victim profile.</p>
+          </div>
+        ) : (
+          <>
+            {/* Persona Summary Header Card */}
+            {isAssigned && (
+              <>
+                <div className="persona-summary-card">
+                  <div className="psc-avatar-col">
+                    <Avatar
+                      initials={persona.initials || "TA"}
+                      seedName={persona.name}
+                      occupation={persona.occupation}
+                    />
+                  </div>
+                  <div className="psc-details-col">
+                    <div className="psc-detail-item">
+                      <strong>Persona Summary</strong>
+                      <p>{personaSummary}</p>
+                    </div>
+                    <div className="psc-detail-item">
+                      <strong>Investigation Objective</strong>
+                      <p>{persona.traits?.[5]?.value || "Extract threat indicators and identify parameters."}</p>
+                    </div>
+                  </div>
+                  <div className="psc-bottom-bar">
+                    <span>Approach: <strong className="text-brand">{persona.traits?.[2]?.value || "Cautious"}</strong></span>
+                    <span>Trust Level: <strong className={trustClass}>{trust}</strong></span>
+                    <span>Interaction Style: <strong className="text-brand">{persona.traits?.[1]?.value || "Conversational"}</strong></span>
+                  </div>
+                </div>
+
+                <div className="conversation-divider">
+                  Conversation begins here
+                </div>
+              </>
+            )}
+
+            {/* Message rows */}
+            {messages.map((m, idx) => {
+              const isScammer = m.role === 'scammer';
+              return (
+                <div
+                  key={idx}
+                  className={`msg-row ${!isScammer ? 'user' : ''}`}
+                >
+                  <div className={`msg-avatar ${isScammer ? 'scammer-av' : 'user-av'}`}>
+                    {isScammer ? (
+                      <Avatar isScammer={true} />
+                    ) : (
+                      <Avatar
+                        initials={persona?.initials || "TA"}
+                        seedName={persona?.name}
+                        occupation={persona?.occupation}
+                      />
+                    )}
+                  </div>
+                  <div className="msg-bubble-wrap">
+                    <div className={`msg-sender ${isScammer ? 'scammer-name' : ''}`}>
+                      {m.sender}
+                    </div>
+                    <div className="msg-bubble">
+                      <span dangerouslySetInnerHTML={{ __html: highlightIOCs(m.content) }} />
+                      {m.link && (
+                        <>
+                          <br />
+                          <a className="msg-link" href={m.link.url} target="_blank" rel="noopener noreferrer">
+                            <LinkIcon style={{ width: 12, height: 12 }} /> {m.link.label}
+                          </a>
+                        </>
+                      )}
+                      {m.ref && (
+                        <>
+                          <br />
+                          <span className="msg-ref">{m.ref}</span>
+                        </>
+                      )}
+                    </div>
+                    <div className="msg-meta">
+                      <span>{m.time}</span>
+                      {!isScammer && m.status === 'read' && (
+                        <span className="msg-status">
+                          <CheckIcon style={{ width: 12, height: 12 }} />
+                        </span>
+                      )}
+                      <button
+                        className="copy-btn"
+                        onClick={() => handleCopy(m.content, idx)}
+                        title={copiedId === idx ? "Copied!" : "Copy"}
+                        type="button"
+                      >
+                        <CopyIcon style={{ width: 11, height: 11 }} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </>
+        )}
+
+        {/* Behavioral status banner & typing bubble */}
+        {isThinking && (
+          <>
+            <div className="behavioral-status-banner" id="behavioralBanner">
+              <div className="bsb-left">
+                <div className="bsb-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: 16, height: 16 }}>
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                  </svg>
+                </div>
+                <div className="bsb-text">
+                  TraceAI is analyzing... <span id="bsbStepText">{thinkingStep}</span>
+                </div>
+              </div>
+              <div className="typing-bubble" style={{ border: 'none', background: 'none', boxShadow: 'none', padding: 0 }}>
+                <div className="typing-dot" style={{ width: 4, height: 4 }} />
+                <div className="typing-dot" style={{ width: 4, height: 4 }} />
+                <div className="typing-dot" style={{ width: 4, height: 4 }} />
+              </div>
+            </div>
+
+            <div className="typing-row" id="typingRow">
+              <div className="msg-avatar user-av">
+                <Avatar
+                  initials={persona?.initials || "TA"}
+                  seedName={persona?.name}
+                  occupation={persona?.occupation}
+                />
+              </div>
+              <div className="typing-bubble-container">
+                <div className="msg-sender" style={{ color: 'var(--brand-mid)' }}>
+                  TraceAI ({persona?.name || 'Agent'})
+                </div>
+                <div className="typing-bubble">
+                  <div className="typing-dot" />
+                  <div className="typing-dot" />
+                  <div className="typing-dot" />
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Input area */}
+      <div className="chat-input-area">
+        <div className="chat-input-row">
+          <button
+            className="chat-icon-btn"
+            title="Paste template"
+            onClick={() => {
+              const template = "Dear SBI customer, your credit card rewards will expire today. Claim instantly at http://sbi-secure-login.co.in/claim";
+              setInputText(template);
+              onPasteTemplate?.(template);
+            }}
+            type="button"
+          >
+            <CopyIcon style={{ width: 16, height: 16 }} />
+          </button>
+
+          <input
+            type="text"
+            id="chatInput"
+            placeholder="Paste scammer's message here..."
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={isLoading}
+          />
+
+          <button
+            className="btn-send"
+            id="btnSendMsg"
+            onClick={handleSend}
+            disabled={isLoading || !inputText.trim()}
+            type="button"
+          >
+            <span>Send</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13" />
+              <polygon points="22 2 15 22 11 13 2 9 22 2" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="chat-footer-note">
+          <LockIcon style={{ width: 11, height: 11 }} />
+          TraceAI is routing the dialogue safely. You stay protected.
+        </div>
+      </div>
+    </div>
+  );
+}
