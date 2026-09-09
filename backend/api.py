@@ -1,6 +1,5 @@
 """
 api.py
-
 TraceAI Production FastAPI Backend
 """
 
@@ -8,7 +7,8 @@ import datetime
 import logging
 import traceback
 from typing import Dict, Optional
-from fastapi import FastAPI, HTTPException, status
+
+from fastapi import FastAPI, HTTPException, status, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -23,64 +23,104 @@ from tools.entity_extractor import EntityExtractor
 from tools.url_checker import URLChecker
 from tools.risk_engine import RiskEngine
 
+
 # --------------------------------------------------
 # Setup Logging
 # --------------------------------------------------
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 )
+
 logger = logging.getLogger("TraceAI-API")
 
+
+# --------------------------------------------------
 # Initialize FastAPI App
+# --------------------------------------------------
+
 app = FastAPI(
     title="TraceAI API",
     description="Backend API for TraceAI Undercover Scam Investigation Platform",
     version="1.0.0"
 )
 
+
+# --------------------------------------------------
 # Enable CORS for frontend integration
+# --------------------------------------------------
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://trace-ai-phi.vercel.app"],
+    allow_origins=[
+        "https://trace-ai-phi.vercel.app"
+    ],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+
+# --------------------------------------------------
+# Explicit OPTIONS handler for /analyze
+# --------------------------------------------------
+
+@app.options("/analyze")
+def analyze_options():
+    return Response(
+        status_code=204,
+        headers={
+            "Access-Control-Allow-Origin": "https://trace-ai-phi.vercel.app",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+        },
+    )
+
+
 # --------------------------------------------------
 # Session Memory (In-Memory Dictionary)
 # --------------------------------------------------
+
 # Stores data for active investigations, keyed by session_id
 sessions: Dict[str, dict] = {}
+
 
 class InvestigationRequest(BaseModel):
     message: str
     session_id: Optional[str] = "default"
 
+
 # --------------------------------------------------
 # Helper Functions
 # --------------------------------------------------
+
 def get_current_time_str() -> str:
     return datetime.datetime.now().strftime("%I:%M %p")
+
 
 def get_persona_profile(threat_type: str, state) -> dict:
     """
     Maps abstract investigation profile characteristics to a concrete persona.
     """
+
     threat = threat_type.lower()
+
     if "bank" in threat or "sbi" in threat:
         name = "Rahul Sharma"
         occupation = "Working Professional"
         initials = "RS"
+
     elif "job" in threat or "recruiter" in threat:
         name = "Priya Patel"
         occupation = "Recent Graduate"
         initials = "PP"
+
     elif "investment" in threat or "crypto" in threat or "stock" in threat:
         name = "Vikram Mehta"
         occupation = "Retired Bank Manager"
         initials = "VM"
+
     else:
         name = "Amit Kumar"
         occupation = "College Student"
@@ -92,20 +132,49 @@ def get_persona_profile(threat_type: str, state) -> dict:
         "avatar": None,
         "initials": initials,
         "traits": [
-            { "icon": "globe", "label": "Language", "value": state.profile.language },
-            { "icon": "message", "label": "Communication Style", "value": state.profile.communication_style },
-            { "icon": "alert", "label": "Risk Approach", "value": "Cautious" },
-            { "icon": "user", "label": "Strategy", "value": state.current_strategy },
-            { "icon": "bar", "label": "Digital Literacy", "value": state.profile.digital_literacy },
-            { "icon": "shield", "label": "Current Objective", "value": state.current_objective }
+            {
+                "icon": "globe",
+                "label": "Language",
+                "value": state.profile.language
+            },
+            {
+                "icon": "message",
+                "label": "Communication Style",
+                "value": state.profile.communication_style
+            },
+            {
+                "icon": "alert",
+                "label": "Risk Approach",
+                "value": "Cautious"
+            },
+            {
+                "icon": "user",
+                "label": "Strategy",
+                "value": state.current_strategy
+            },
+            {
+                "icon": "bar",
+                "label": "Digital Literacy",
+                "value": state.profile.digital_literacy
+            },
+            {
+                "icon": "shield",
+                "label": "Current Objective",
+                "value": state.current_objective
+            }
         ],
-        "aiTip": f"Objective: {state.current_objective}. Strategy: {state.current_strategy} response style."
+        "aiTip": (
+            f"Objective: {state.current_objective}. "
+            f"Strategy: {state.current_strategy} response style."
+        )
     }
+
 
 def build_progress(investigation, state) -> list:
     """
     Generates step-by-step progress list based on investigation state and turn count.
     """
+
     has_iocs = (
         len(investigation.phone_numbers) > 0
         or len(investigation.emails) > 0
@@ -124,11 +193,19 @@ def build_progress(investigation, state) -> list:
         },
         {
             "label": "Undercover\nEngagement",
-            "state": "done" if state.turn_number > 2 else ("current" if state.turn_number > 1 else "locked")
+            "state": (
+                "done"
+                if state.turn_number > 2
+                else ("current" if state.turn_number > 1 else "locked")
+            )
         },
         {
             "label": "Evidence\nSecured",
-            "state": "done" if (has_iocs and state.turn_number > 2) else "locked"
+            "state": (
+                "done"
+                if (has_iocs and state.turn_number > 2)
+                else "locked"
+            )
         },
         {
             "label": "Report\nReady",
@@ -136,21 +213,30 @@ def build_progress(investigation, state) -> list:
         }
     ]
 
-    # Clean up sequential logic (cannot have 'locked' right after 'done')
+    # Clean up sequential logic
+    # (cannot have "locked" right after "done")
     for i in range(len(steps) - 1):
-        if steps[i]["state"] == "done" and steps[i+1]["state"] == "locked":
-            steps[i+1]["state"] = "current"
+        if (
+            steps[i]["state"] == "done"
+            and steps[i + 1]["state"] == "locked"
+        ):
+            steps[i + 1]["state"] = "current"
             break
 
     return steps
+
 
 def build_evidence(investigation) -> list:
     """
     Maps list of extracted indicators to the structured format required by the UI.
     """
+
     evidence = []
 
+    # --------------------------------------------------
     # Website URLs
+    # --------------------------------------------------
+
     if investigation.urls:
         for url in investigation.urls:
             evidence.append({
@@ -165,7 +251,10 @@ def build_evidence(investigation) -> list:
             "status": "pending"
         })
 
+    # --------------------------------------------------
     # Phone numbers
+    # --------------------------------------------------
+
     if investigation.phone_numbers:
         for phone in investigation.phone_numbers:
             evidence.append({
@@ -180,7 +269,10 @@ def build_evidence(investigation) -> list:
             "status": "pending"
         })
 
+    # --------------------------------------------------
     # Email Addresses
+    # --------------------------------------------------
+
     if investigation.emails:
         for email in investigation.emails:
             evidence.append({
@@ -195,7 +287,10 @@ def build_evidence(investigation) -> list:
             "status": "pending"
         })
 
+    # --------------------------------------------------
     # UPI IDs
+    # --------------------------------------------------
+
     if investigation.upi_ids:
         for upi in investigation.upi_ids:
             evidence.append({
@@ -210,7 +305,10 @@ def build_evidence(investigation) -> list:
             "status": "pending"
         })
 
+    # --------------------------------------------------
     # Bank Names
+    # --------------------------------------------------
+
     if investigation.bank_names:
         for bank in investigation.bank_names:
             evidence.append({
@@ -221,9 +319,11 @@ def build_evidence(investigation) -> list:
 
     return evidence
 
+
 # --------------------------------------------------
 # ENDPOINTS
 # --------------------------------------------------
+
 @app.get("/")
 def root():
     return {
@@ -232,32 +332,40 @@ def root():
         "timestamp": datetime.datetime.now().isoformat()
     }
 
+
 @app.get("/health")
 def health():
     return {
         "status": "healthy"
     }
 
+
 @app.post("/new")
 def new_investigation(request: Dict[str, str]):
     """
     Clears the investigation session state to begin a new case.
     """
+
     session_id = request.get("session_id", "default")
+
     if session_id in sessions:
         del sessions[session_id]
         logger.info(f"Session '{session_id}' has been reset.")
+
     return {
         "status": "success",
         "message": f"Session '{session_id}' successfully reset."
     }
 
+
 @app.post("/analyze")
 def analyze(request: InvestigationRequest):
     """
-    Processes scammer messages, runs undercover dialogue agent, updates evidence,
-    re-scores risk metrics, and prepares investigation reports.
+    Processes scammer messages, runs undercover dialogue agent,
+    updates evidence, re-scores risk metrics, and prepares
+    investigation reports.
     """
+
     session_id = request.session_id or "default"
     message = request.message.strip()
 
@@ -267,10 +375,17 @@ def analyze(request: InvestigationRequest):
             detail="Message cannot be empty."
         )
 
-    logger.info(f"Processing message in session '{session_id}': {message[:50]}...")
+    logger.info(
+        f"Processing message in session '{session_id}': "
+        f"{message[:50]}..."
+    )
 
     try:
+
+        # --------------------------------------------------
         # Initialize or retrieve active session state
+        # --------------------------------------------------
+
         if session_id not in sessions:
             sessions[session_id] = {
                 "session": ConversationSession(),
@@ -282,39 +397,125 @@ def analyze(request: InvestigationRequest):
             }
 
         state_data = sessions[session_id]
+
         session = state_data["session"]
         engine = state_data["engine"]
         timeline = state_data["timeline"]
 
+        # --------------------------------------------------
         # Run core investigation agent
+        # --------------------------------------------------
+
         investigation_result = InvestigationAgent().run(message)
 
         if state_data["investigation"] is None:
-            # First turn: Initialize engine, persona profile, and base results
+
+            # First turn:
+            # Initialize engine, persona profile, and base results
+
             state_data["investigation"] = investigation_result
-            engine_state = engine.initialize(investigation_result.threat_type)
-            state_data["persona_profile"] = get_persona_profile(investigation_result.threat_type, engine_state)
+
+            engine_state = engine.initialize(
+                investigation_result.threat_type
+            )
+
+            state_data["persona_profile"] = get_persona_profile(
+                investigation_result.threat_type,
+                engine_state
+            )
 
             timeline.append({
                 "time": get_current_time_str(),
-                "text": f"Scam threat detected: {investigation_result.threat_type}"
+                "text": (
+                    f"Scam threat detected: "
+                    f"{investigation_result.threat_type}"
+                )
             })
+
             timeline.append({
                 "time": get_current_time_str(),
-                "text": f"Created persona: {state_data['persona_profile']['name']}"
+                "text": (
+                    f"Created persona: "
+                    f"{state_data['persona_profile']['name']}"
+                )
             })
+
         else:
-            # Subsequent turns: Update existing investigation with accumulated IOCs
-            existing_inv = state_data["investigation"]
-            existing_inv.phone_numbers = sorted(list(set(existing_inv.phone_numbers + investigation_result.phone_numbers)))
-            existing_inv.emails = sorted(list(set(existing_inv.emails + investigation_result.emails)))
-            existing_inv.urls = sorted(list(set(existing_inv.urls + investigation_result.urls)))
-            existing_inv.upi_ids = sorted(list(set(existing_inv.upi_ids + investigation_result.upi_ids)))
-            existing_inv.otp_keywords = sorted(list(set(existing_inv.otp_keywords + investigation_result.otp_keywords)))
-            existing_inv.amounts = sorted(list(set(existing_inv.amounts + investigation_result.amounts)))
-            existing_inv.bank_names = sorted(list(set(existing_inv.bank_names + investigation_result.bank_names)))
 
+            # --------------------------------------------------
+            # Subsequent turns:
+            # Update existing investigation with accumulated IOCs
+            # --------------------------------------------------
+
+            existing_inv = state_data["investigation"]
+
+            existing_inv.phone_numbers = sorted(
+                list(
+                    set(
+                        existing_inv.phone_numbers
+                        + investigation_result.phone_numbers
+                    )
+                )
+            )
+
+            existing_inv.emails = sorted(
+                list(
+                    set(
+                        existing_inv.emails
+                        + investigation_result.emails
+                    )
+                )
+            )
+
+            existing_inv.urls = sorted(
+                list(
+                    set(
+                        existing_inv.urls
+                        + investigation_result.urls
+                    )
+                )
+            )
+
+            existing_inv.upi_ids = sorted(
+                list(
+                    set(
+                        existing_inv.upi_ids
+                        + investigation_result.upi_ids
+                    )
+                )
+            )
+
+            existing_inv.otp_keywords = sorted(
+                list(
+                    set(
+                        existing_inv.otp_keywords
+                        + investigation_result.otp_keywords
+                    )
+                )
+            )
+
+            existing_inv.amounts = sorted(
+                list(
+                    set(
+                        existing_inv.amounts
+                        + investigation_result.amounts
+                    )
+                )
+            )
+
+            existing_inv.bank_names = sorted(
+                list(
+                    set(
+                        existing_inv.bank_names
+                        + investigation_result.bank_names
+                    )
+                )
+            )
+
+            # --------------------------------------------------
             # Recalculate risk scoring with all accumulated evidence
+            # --------------------------------------------------
+
             entities = {
                 "phone_numbers": existing_inv.phone_numbers,
                 "emails": existing_inv.emails,
@@ -324,7 +525,12 @@ def analyze(request: InvestigationRequest):
                 "amounts": existing_inv.amounts,
                 "bank_names": existing_inv.bank_names,
             }
-            url_analysis = [URLChecker.analyze(url) for url in existing_inv.urls]
+
+            url_analysis = [
+                URLChecker.analyze(url)
+                for url in existing_inv.urls
+            ]
+
             risk = RiskEngine.calculate(
                 {
                     "is_scam": existing_inv.is_scam,
@@ -333,30 +539,74 @@ def analyze(request: InvestigationRequest):
                 entities,
                 url_analysis
             )
+
             existing_inv.risk_score = risk["risk_score"]
             existing_inv.risk_level = risk["risk_level"]
-            existing_inv.detected_indicators = sorted(list(set(existing_inv.detected_indicators + risk["reasons"])))
-            existing_inv.recommendations = sorted(list(set(existing_inv.recommendations + risk["reasons"])))
+
+            existing_inv.detected_indicators = sorted(
+                list(
+                    set(
+                        existing_inv.detected_indicators
+                        + risk["reasons"]
+                    )
+                )
+            )
+
+            existing_inv.recommendations = sorted(
+                list(
+                    set(
+                        existing_inv.recommendations
+                        + risk["reasons"]
+                    )
+                )
+            )
 
             investigation_result = existing_inv
 
+            # --------------------------------------------------
             # Advance engine objective/strategy state
-            engine_state = engine.update(objective_completed=True)
-            
-            # Synchronize modified engine state inside persona attributes
-            state_data["persona_profile"]["traits"][3]["value"] = engine_state.current_strategy
-            state_data["persona_profile"]["traits"][5]["value"] = engine_state.current_objective
-            state_data["persona_profile"]["aiTip"] = f"Objective: {engine_state.current_objective}. Strategy: {engine_state.current_strategy} response style."
+            # --------------------------------------------------
+
+            engine_state = engine.update(
+                objective_completed=True
+            )
+
+            # --------------------------------------------------
+            # Synchronize modified engine state inside persona
+            # --------------------------------------------------
+
+            state_data["persona_profile"]["traits"][3]["value"] = (
+                engine_state.current_strategy
+            )
+
+            state_data["persona_profile"]["traits"][5]["value"] = (
+                engine_state.current_objective
+            )
+
+            state_data["persona_profile"]["aiTip"] = (
+                f"Objective: {engine_state.current_objective}. "
+                f"Strategy: {engine_state.current_strategy} "
+                f"response style."
+            )
 
             timeline.append({
                 "time": get_current_time_str(),
-                "text": f"Scammer response analyzed. Strategy advanced to: {engine_state.current_strategy}"
+                "text": (
+                    "Scammer response analyzed. Strategy advanced to: "
+                    f"{engine_state.current_strategy}"
+                )
             })
 
+        # --------------------------------------------------
         # Append scammer message to undercover session history
+        # --------------------------------------------------
+
         session.add_scammer_message(message)
 
-        # Run conversation agent to generate the undercover response
+        # --------------------------------------------------
+        # Run conversation agent
+        # --------------------------------------------------
+
         conversation_result = ConversationAgent().run(
             investigation=investigation_result,
             investigation_state=engine_state,
@@ -364,73 +614,145 @@ def analyze(request: InvestigationRequest):
             conversation_history=session.get_history()
         )
 
+        # --------------------------------------------------
         # Add reply back to conversation history
-        session.add_traceai_reply(conversation_result.reply)
+        # --------------------------------------------------
 
-        # Log trace event
+        session.add_traceai_reply(
+            conversation_result.reply
+        )
+
         timeline.append({
             "time": get_current_time_str(),
-            "text": f"Generated reply using objective: {engine_state.current_objective}"
+            "text": (
+                "Generated reply using objective: "
+                f"{engine_state.current_objective}"
+            )
         })
 
+        # --------------------------------------------------
         # Save record of threat metrics to MemoryManager
-        MemoryManager().save(investigation_result.model_dump())
+        # --------------------------------------------------
 
+        MemoryManager().save(
+            investigation_result.model_dump()
+        )
+
+        # --------------------------------------------------
         # Generate latest investigation report
+        # --------------------------------------------------
+
         report_result = ReportAgent().run(
             investigation=investigation_result,
             conversation=conversation_result
         )
+
         state_data["report"] = report_result
 
+        # --------------------------------------------------
         # Construct final output JSON
-        persona_profile = state_data["persona_profile"]
-        progress_list = build_progress(investigation_result, engine_state)
-        evidence_list = build_evidence(investigation_result)
+        # --------------------------------------------------
 
+        persona_profile = state_data["persona_profile"]
+
+        progress_list = build_progress(
+            investigation_result,
+            engine_state
+        )
+
+        evidence_list = build_evidence(
+            investigation_result
+        )
+
+        # --------------------------------------------------
         # Map complete session log messages
+        # --------------------------------------------------
+
         formatted_messages = []
+
         for item in session.history:
+
             role = item["role"]
             content = item["message"]
+
             is_scammer = role == "scammer"
 
             link = None
+
             if is_scammer:
-                extracted = EntityExtractor.extract(content)
+
+                extracted = EntityExtractor.extract(
+                    content
+                )
+
                 if extracted["urls"]:
+
                     link = {
                         "url": extracted["urls"][0],
                         "label": extracted["urls"][0]
                     }
 
             formatted_messages.append({
-                "role": "scammer" if is_scammer else "user",
-                "sender": "Scammer" if is_scammer else f"{persona_profile['name']} (You)",
+                "role": (
+                    "scammer"
+                    if is_scammer
+                    else "user"
+                ),
+                "sender": (
+                    "Scammer"
+                    if is_scammer
+                    else f"{persona_profile['name']} (You)"
+                ),
                 "time": get_current_time_str(),
                 "content": content,
                 "link": link,
-                "status": "read" if not is_scammer else None
+                "status": (
+                    "read"
+                    if not is_scammer
+                    else None
+                )
             })
+
+        # --------------------------------------------------
+        # Final Response
+        # --------------------------------------------------
 
         return {
             "session_id": session_id,
+
             "investigation": {
                 "riskScore": investigation_result.risk_score,
-                "riskLevel": f"{investigation_result.risk_level} RISK",
+                "riskLevel": (
+                    f"{investigation_result.risk_level} RISK"
+                ),
                 "threatType": investigation_result.threat_type,
-                "threatSeverity": "Critical" if investigation_result.risk_score >= 80 else ("High" if investigation_result.risk_score >= 50 else "Medium"),
+                "threatSeverity": (
+                    "Critical"
+                    if investigation_result.risk_score >= 80
+                    else (
+                        "High"
+                        if investigation_result.risk_score >= 50
+                        else "Medium"
+                    )
+                ),
                 "confidenceScore": investigation_result.confidence,
                 "progress": progress_list,
                 "evidence": evidence_list,
-                "activity": list(reversed(timeline))
+                "activity": list(
+                    reversed(timeline)
+                )
             },
+
             "persona": persona_profile,
+
             "conversation": {
                 "reply": conversation_result.reply,
-                "expected_outcome": conversation_result.expected_outcome,
+                "expected_outcome": (
+                    conversation_result.expected_outcome
+                ),
                 "messages": formatted_messages
             },
+
             "report": {
                 "title": report_result.title,
                 "markdown": report_result.markdown
@@ -438,13 +760,31 @@ def analyze(request: InvestigationRequest):
         }
 
     except Exception as e:
-        logger.error(f"Error executing analysis: {str(e)}")
-        logger.error(traceback.format_exc())
+
+        logger.error(
+            f"Error executing analysis: {str(e)}"
+        )
+
+        logger.error(
+            traceback.format_exc()
+        )
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error executing investigation: {str(e)}"
         )
 
+
+# --------------------------------------------------
+# Local Development
+# --------------------------------------------------
+
 if __name__ == "__main__":
+
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8001)
+
+    uvicorn.run(
+        app,
+        host="127.0.0.1",
+        port=8001
+    )
