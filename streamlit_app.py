@@ -1,3 +1,19 @@
+"""
+streamlit_app.py
+================
+Static Streamlit mock-up of the TraceAI dashboard.
+
+NOTE: this is a UI PROTOTYPE / wireframe, not the live application.
+It renders a fixed example scenario (banking phishing, HIGH risk) and
+only echoes typed messages into the chat column - it does NOT call
+the agents or the API.
+
+The production UI is the Next.js dashboard in ``frontend/`` wired to
+``backend/api.py``. Run this file only for quick layout previews:
+
+    streamlit run streamlit_app.py
+"""
+
 import streamlit as st
 
 # -------------------------
@@ -13,6 +29,8 @@ st.set_page_config(
 # -------------------------
 # Session State
 # -------------------------
+# Streamlit reruns the script on every interaction; st.session_state
+# is the only place chat lines survive between reruns.
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -29,6 +47,7 @@ with st.sidebar:
 
     st.divider()
 
+    # NOTE: buttons below are visual placeholders only.
     st.button(
         "➕ New Investigation",
         use_container_width=True
@@ -50,7 +69,7 @@ with st.sidebar:
     )
 
 # -------------------------
-# Main Layout
+# Main Layout (3 columns: persona | chat | overview)
 # -------------------------
 
 left, center, right = st.columns(
@@ -58,7 +77,7 @@ left, center, right = st.columns(
 )
 
 # =========================
-# LEFT
+# LEFT - Active persona card
 # =========================
 
 with left:
@@ -78,7 +97,7 @@ with left:
     )
 
 # =========================
-# CENTER
+# CENTER - Chat column
 # =========================
 
 with center:
@@ -91,6 +110,7 @@ with center:
 
     st.divider()
 
+    # Render the stored transcript.
     for message in st.session_state.messages:
 
         with st.chat_message(
@@ -101,6 +121,7 @@ with center:
                 message["content"]
             )
 
+    # Chat input: appends the analyst-pasted scammer line.
     user_msg = st.chat_input(
         "Paste scammer's latest message..."
     )
@@ -117,13 +138,14 @@ with center:
         st.rerun()
 
 # =========================
-# RIGHT
+# RIGHT - Static overview (fixed demo values)
 # =========================
 
 with right:
 
     st.subheader("🛡 Investigation Hub")
 
+    # Demo values: the live app computes these from real evidence.
     st.error("🔴 HIGH RISK")
 
     st.metric(
@@ -140,6 +162,7 @@ with right:
 
     st.write("### Investigation Progress")
 
+    # Sample progress: 45% demo fill.
     st.progress(45)
 
     st.write("✅ Threat Detected")

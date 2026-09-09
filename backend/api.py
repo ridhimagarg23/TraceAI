@@ -1,6 +1,29 @@
 """
 api.py
+======
 TraceAI Production FastAPI Backend
+
+This is the HTTP surface of the whole platform. The Next.js dashboard
+talks to three endpoints:
+
+    POST /analyze   - feed one scammer message into the pipeline
+    POST /new       - reset a session (start a fresh case)
+    GET  /health    - liveness probe for hosting platforms
+
+One /analyze turn runs this pipeline:
+
+    scammer message
+        -> InvestigationAgent        (IOC regex + URL checks + LLM verdict
+                                       + deterministic risk score)
+        -> AdaptiveInvestigationEngine (persona profile + objective ladder)
+        -> ConversationAgent         (persona's next reply)
+        -> MemoryManager             (archive case facts to JSON)
+        -> ReportAgent               (markdown incident report)
+        -> JSON payload for the dashboard
+
+Session state (per session_id) lives in the in-memory ``sessions``
+dict, so a multi-turn undercover conversation is stateful across
+requests but resets when the process restarts.
 """
 
 import datetime
@@ -69,13 +92,31 @@ app.add_middleware(
 # Session Memory (In-Memory Dictionary)
 # --------------------------------------------------
 
-# Stores data for active investigations, keyed by session_id
+# Stores state for active investigations, keyed by session_id.
+#
+# Each value is a dict with this shape:
+#   {
+#     "session":        ConversationSession      (chat transcript)
+#     "engine":         AdaptiveInvestigationEngine (objectives/profile)
+#     "investigation":  InvestigationResult | None (accumulated case facts)
+#     "report":         ReportResult | None       (latest markdown report)
+#     "persona_profile": dict | None              (UI persona payload)
+#     "timeline":       list[dict]                (activity feed for the UI)
+#   }
+#
+# NOTE: in-memory only - state is lost on process restart. Scale-out
+# would require swapping this dict for Redis or similar.
 sessions: Dict[str, dict] = {}
 
 
 class InvestigationRequest(BaseModel):
+    """Request body for POST /analyze."""
+
     message: str
+    """The scammer message to investigate (non-empty)."""
+
     session_id: Optional[str] = "default"
+    """Identifies the undercover conversation (state continuity)."""
 
 
 # --------------------------------------------------
@@ -88,7 +129,18 @@ def get_current_time_str() -> str:
 
 def get_persona_profile(threat_type: str, state) -> dict:
     """
-    Maps abstract investigation profile characteristics to a concrete persona.
+    Maps abstract investigation profile characteristics to a concrete
+    persona for the UI.
+
+    The engine (``AdaptiveInvestigationEngine``) decides *how* the
+    persona communicates (language / style / literacy); this helper
+    decides *who* the persona is - a named cover identity with an
+    occupation that fits the threat family (e.g. a bank scam gets
+    "Rahul Sharma, Working Professional").
+
+    Returns a payload shaped exactly like the dashboard's
+    ``PersonaPanel`` expects (see frontend/lib/constants.js for the
+    initial/empty counterpart).
     """
 
     threat = threat_type.lower()
@@ -159,7 +211,19 @@ def get_persona_profile(threat_type: str, state) -> dict:
 
 def build_progress(investigation, state) -> list:
     """
-    Generates step-by-step progress list based on investigation state and turn count.
+    Generates the 5-step investigation progress list for the UI.
+
+    Each step is one of ``done`` / ``current`` / ``locked`` based on
+    the accumulated investigation and the engine's turn counter:
+
+        1. Threat Detected       - LLM flagged the message as a scam
+        2. IOC Extracted         - at least one IOC family captured
+        3. Undercover Engagement - dialogue has started (turn > 1)
+        4. Evidence Secured      - IOCs exist AND dialogue is ongoing
+        5. Report Ready          - report has been generated
+
+    A sequential-cleanup pass guarantees a step can never be "locked"
+    right after a "done" step (no gaps in the UI stepper).
     """
 
     has_iocs = (
@@ -215,7 +279,17 @@ def build_progress(investigation, state) -> list:
 
 def build_evidence(investigation) -> list:
     """
-    Maps list of extracted indicators to the structured format required by the UI.
+    Maps extracted indicators to the evidence-tracker format of the UI.
+
+    Every IOC family yields one or more entries of the shape
+    ``{"type", "name", "status"}`` where status is:
+
+    * ``pending``   - nothing collected for this family yet
+    * ``collected`` - at least one real indicator found
+    * ``verified``  - treated as extra-confident (bank names)
+
+    Unknown/empty families still render as "pending" rows so the
+    analyst can see at a glance which evidence is still missing.
     """
 
     evidence = []
@@ -378,8 +452,11 @@ def analyze(request: InvestigationRequest):
     try:
 
         # --------------------------------------------------
-        # Initialize or retrieve active session state
+        # 1. Initialize or retrieve active session state
         # --------------------------------------------------
+        # First message of a session creates the empty state bundle;
+        # later messages reuse it so IOCs, persona and objectives
+        # accumulate across turns.
 
         if session_id not in sessions:
             sessions[session_id] = {
@@ -398,18 +475,22 @@ def analyze(request: InvestigationRequest):
         timeline = state_data["timeline"]
 
         # --------------------------------------------------
-        # Run core investigation agent
+        # 2. Run core investigation agent
         # --------------------------------------------------
 
         investigation_result = InvestigationAgent().run(message)
 
         if state_data["investigation"] is None:
 
-            # First turn:
-            # Initialize engine, persona profile, and base results
+            # -------------------------------------------
+            # FIRST TURN of a session:
+            # initialize engine, persona profile, timeline
+            # -------------------------------------------
 
             state_data["investigation"] = investigation_result
 
+            # Build the persona state from the threat family, then
+            # map it to a concrete named cover identity for the UI.
             engine_state = engine.initialize(
                 investigation_result.threat_type
             )
@@ -437,10 +518,12 @@ def analyze(request: InvestigationRequest):
 
         else:
 
-            # --------------------------------------------------
-            # Subsequent turns:
-            # Update existing investigation with accumulated IOCs
-            # --------------------------------------------------
+            # -------------------------------------------
+            # SUBSEQUENT TURNS:
+            # merge newly extracted IOCs into the
+            # accumulated investigation, then re-score risk
+            # on the full evidence set
+            # -------------------------------------------
 
             existing_inv = state_data["investigation"]
 
@@ -510,6 +593,8 @@ def analyze(request: InvestigationRequest):
             # --------------------------------------------------
             # Recalculate risk scoring with all accumulated evidence
             # --------------------------------------------------
+            # The risk score must reflect everything collected so far
+            # (this message + all previous ones in the session).
 
             entities = {
                 "phone_numbers": existing_inv.phone_numbers,
@@ -593,14 +678,11 @@ def analyze(request: InvestigationRequest):
             })
 
         # --------------------------------------------------
-        # Append scammer message to undercover session history
+        # 3. Record the scammer message, then generate the
+        #    persona's reply via the ConversationAgent
         # --------------------------------------------------
 
         session.add_scammer_message(message)
-
-        # --------------------------------------------------
-        # Run conversation agent
-        # --------------------------------------------------
 
         conversation_result = ConversationAgent().run(
             investigation=investigation_result,
@@ -609,10 +691,7 @@ def analyze(request: InvestigationRequest):
             conversation_history=session.get_history()
         )
 
-        # --------------------------------------------------
-        # Add reply back to conversation history
-        # --------------------------------------------------
-
+        # Keep the transcript complete for the next turn's prompt.
         session.add_traceai_reply(
             conversation_result.reply
         )
@@ -626,7 +705,7 @@ def analyze(request: InvestigationRequest):
         })
 
         # --------------------------------------------------
-        # Save record of threat metrics to MemoryManager
+        # 4. Archive the case facts into threat memory (JSON)
         # --------------------------------------------------
 
         MemoryManager().save(
@@ -634,8 +713,10 @@ def analyze(request: InvestigationRequest):
         )
 
         # --------------------------------------------------
-        # Generate latest investigation report
+        # 5. Generate the latest investigation report
         # --------------------------------------------------
+        # The report is re-generated each turn, so the stored report
+        # always reflects the newest accumulated evidence.
 
         report_result = ReportAgent().run(
             investigation=investigation_result,
@@ -645,7 +726,7 @@ def analyze(request: InvestigationRequest):
         state_data["report"] = report_result
 
         # --------------------------------------------------
-        # Construct final output JSON
+        # 6. Construct final output JSON (UI-shaped payload)
         # --------------------------------------------------
 
         persona_profile = state_data["persona_profile"]
@@ -660,8 +741,13 @@ def analyze(request: InvestigationRequest):
         )
 
         # --------------------------------------------------
-        # Map complete session log messages
+        # Map complete session log to chat bubbles
         # --------------------------------------------------
+        # Renders every stored turn (scammer + persona) into the
+        # message shape the ChatPanel expects. "role" is what the UI
+        # keys on: "scammer" = left bubble, "user" = right bubble
+        # (the persona's replies are shown as the analyst's agent).
+        # A detected URL in a scammer line is surfaced as a link chip.
 
         formatted_messages = []
 
@@ -709,7 +795,19 @@ def analyze(request: InvestigationRequest):
             })
 
         # --------------------------------------------------
-        # Final Response
+        # 7. Final Response
+        # --------------------------------------------------
+        # The dashboard consumes this contract directly:
+        #
+        #   session_id     - id of the undercover session
+        #   investigation  - risk gauge, progress steps, evidence
+        #                    tracker and reversed activity timeline
+        #   persona        - cover identity card payload
+        #   conversation   - persona reply + full formatted chat log
+        #   report         - markdown incident report
+        #
+        # See frontend/lib/constants.js (INITIAL_DASHBOARD_DATA) for
+        # the empty-state counterpart of these shapes.
         # --------------------------------------------------
 
         return {
@@ -721,6 +819,7 @@ def analyze(request: InvestigationRequest):
                     f"{investigation_result.risk_level} RISK"
                 ),
                 "threatType": investigation_result.threat_type,
+                # Friendly severity label derived from the risk score.
                 "threatSeverity": (
                     "Critical"
                     if investigation_result.risk_score >= 80
@@ -733,6 +832,7 @@ def analyze(request: InvestigationRequest):
                 "confidenceScore": investigation_result.confidence,
                 "progress": progress_list,
                 "evidence": evidence_list,
+                # Activity feed newest-first for the UI.
                 "activity": list(
                     reversed(timeline)
                 )

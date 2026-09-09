@@ -1,3 +1,15 @@
+// Sidebar.jsx
+// ===========
+// Left navigation rail:
+//  * Logo + product name
+//  * "New Investigation" primary action
+//  * Nav links (Dashboard / History / Saved Cases / Reports)
+//  * Footer with a safety shield card + dark-mode toggle
+//
+// History / Saved Cases are future features: clicking them bubbles
+// up through onShowNotImplemented (alert stub in page.jsx).
+// -------------------------------------------------------------------
+
 import React from 'react';
 import { ShieldIcon } from './Icons';
 
@@ -10,6 +22,7 @@ export default function Sidebar({
 }) {
   return (
     <aside className="sidebar">
+      {/* Branding */}
       <div className="logo">
         <div className="logo-icon">
           <ShieldIcon style={{ width: 20, height: 20, stroke: '#fff', strokeWidth: 2.2 }} />
@@ -20,6 +33,7 @@ export default function Sidebar({
         </div>
       </div>
 
+      {/* Primary action: wipe the session and start over */}
       <button className="btn-new" onClick={onNewInvestigation} type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 5v14M5 12h14" />
@@ -27,6 +41,7 @@ export default function Sidebar({
         <span>New Investigation</span>
       </button>
 
+      {/* Active nav item: the dashboard is currently the only screen */}
       <button className="nav-item active" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
           <rect x="3" y="3" width="7" height="7" rx="1" />
@@ -37,6 +52,7 @@ export default function Sidebar({
         <span>Dashboard</span>
       </button>
 
+      {/* Future features - shown as stubs */}
       <button className="nav-item" type="button" onClick={() => onShowNotImplemented('History')}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="10" />
@@ -55,6 +71,7 @@ export default function Sidebar({
         <span>Saved Cases</span>
       </button>
 
+      {/* Reports: opens the current report modal (disabled until one exists) */}
       <button className="nav-item" type="button" onClick={onGenerateReport}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
           <path d="M9 17H7A5 5 0 0 1 7 7h2" />
@@ -65,6 +82,7 @@ export default function Sidebar({
       </button>
 
       <div className="sidebar-footer">
+        {/* Static awareness card */}
         <div className="shield-card">
           <div className="sc-icon-wrap">
             <ShieldIcon style={{ width: 16, height: 16, strokeWidth: 2.5 }} />
@@ -72,6 +90,8 @@ export default function Sidebar({
           <h4>Stay Safe, Stay Smart</h4>
           <p>TraceAI investigates scams while you stay protected.</p>
         </div>
+
+        {/* Dark mode switch (adds .dark to <body>, see page.jsx) */}
         <div className="dark-toggle-row">
           <div className="dtlabel">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

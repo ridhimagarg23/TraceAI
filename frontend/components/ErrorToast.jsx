@@ -1,3 +1,10 @@
+// ErrorToast.jsx
+// ==============
+// Small floating error banner rendered when an /analyze request
+// fails (network error, 5xx, ...). Auto-dismisses in page.jsx after
+// 5 seconds; click anywhere on it to dismiss sooner.
+// -------------------------------------------------------------------
+
 import React from 'react';
 
 export default function ErrorToast({ message, onClose }) {

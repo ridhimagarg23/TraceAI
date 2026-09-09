@@ -1,3 +1,12 @@
+// Topbar.jsx
+// ===========
+// Session header bar shown above the 3-panel content row:
+//  * Left: "session alert" status text (danger banner look)
+//  * Middle: Change Persona / End Investigation actions
+//  * Right: protected-session badge + live timer, "Generate Report"
+//    button and the user avatar mascot
+// -------------------------------------------------------------------
+
 import React from 'react';
 import { ShieldIcon } from './Icons';
 import Avatar from './Avatar';
@@ -12,6 +21,7 @@ export default function Topbar({
 }) {
   return (
     <div className="topbar" id="topbar">
+      {/* Status blurb */}
       <div className="topbar-left">
         <div className="warn-icon-wrap">
           <ShieldIcon style={{ width: 16, height: 16 }} />
@@ -22,7 +32,9 @@ export default function Topbar({
         </div>
       </div>
 
+      {/* Session actions */}
       <div className="topbar-actions">
+        {/* Persona is auto-configured per threat; this button is a stub */}
         <button className="btn-outline" onClick={onChangePersona} type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -43,6 +55,7 @@ export default function Topbar({
         </button>
       </div>
 
+      {/* Session readouts + report CTA */}
       <div className="topbar-right">
         <div className="protected-badge">
           <div className="pulse-dot" />
@@ -52,6 +65,7 @@ export default function Topbar({
           </span>
         </div>
 
+        {/* Disabled until the backend produced a report for this session */}
         <button
           className="btn-report"
           id="btnReportHeader"
@@ -66,6 +80,7 @@ export default function Topbar({
           Generate Report
         </button>
 
+        {/* Analyst mascot */}
         <div className="avatar-ring" id="userAvatar">
           <Avatar isMascot={true} />
         </div>

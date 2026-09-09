@@ -1,5 +1,6 @@
 # Virtual Environment & Env Vars
 venv/
+.venv/
 .env
 
 # Python Caches & Compiled files

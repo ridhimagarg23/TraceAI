@@ -1,9 +1,18 @@
 """
 conversation_agent.py
+=====================
+Adaptive Conversation Agent (step 4 of the pipeline).
 
-Adaptive Investigation Conversation Agent.
-Generates natural replies based on the current
-investigation state.
+This agent writes the *persona's next chat reply* to the scammer.
+It is deliberately narrow: the strategy brain (AdaptiveInvestigation
+Engine) has already decided WHO the persona is, WHAT objective to
+pursue and WHICH behavioural style to use - this agent only has to
+sound like a believable human pursuing that objective.
+
+Safety rules live in the prompt (``prompts/conversation_prompt.txt``):
+never reveal personal/financial data, never admit being an AI or an
+investigation, keep replies short (< 35 words) and reply in the
+scammer's language.
 """
 
 from llm.llm_client import LLMClient
@@ -22,6 +31,7 @@ from utils.schemas import (
 class ConversationAgent:
 
     def __init__(self):
+        """Load the LLM client and the conversation prompt template."""
 
         self.llm = LLMClient()
 
@@ -36,6 +46,40 @@ class ConversationAgent:
         latest_message: str,
         conversation_history: str = "",
     ) -> ConversationResult:
+        """
+        Generate the persona's next reply for one scammer message.
+
+        Parameters
+        ----------
+        investigation : InvestigationResult
+            Current (accumulated) case facts - threat type, risk,
+            detected IOCs - so the persona reacts consistently to
+            what the scammer has already sent.
+        investigation_state : InvestigationState
+            Active profile + current objective + current strategy.
+        latest_message : str
+            The scammer message this reply answers.
+        conversation_history : str
+            Plain-text transcript of all prior turns (or
+            "No previous conversation." on the first turn).
+
+        Returns
+        -------
+        ConversationResult
+            ``reply`` (the persona text), ``objective`` (which goal it
+            served) and ``expected_outcome`` (what the agent hopes the
+            scammer reveals next).
+
+        Raises
+        ------
+        ValueError
+            If the LLM output is missing any required key.
+        """
+
+        # ----------------------------------------------------------
+        # Build the prompt: system rules + every piece of context the
+        # reply must stay consistent with.
+        # ----------------------------------------------------------
 
         final_prompt = f"""
 {self.prompt}
@@ -123,6 +167,10 @@ Return ONLY valid JSON.
             final_prompt,
             json_output=True
         )
+
+        # ----------------------------
+        # Validate LLM Response
+        # ----------------------------
 
         required_keys = [
             "reply",

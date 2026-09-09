@@ -1,3 +1,14 @@
+// ReportModal.jsx
+// ===============
+// Modal dialog that previews the markdown investigation report and
+// lets the analyst download it as a .md file.
+//
+// The report object comes from the backend response:
+//   { title: string, markdown: string }
+// markdown is rendered with the "marked" library; download builds a
+// Blob client-side (no server round-trip needed).
+// -------------------------------------------------------------------
+
 import React from 'react';
 import { marked } from 'marked';
 
@@ -6,14 +17,17 @@ export default function ReportModal({
   report,
   onClose
 }) {
+  // Render nothing unless the modal was opened AND a report exists.
   if (!isOpen || !report) return null;
 
+  // Create a markdown file on the fly and trigger a browser download.
   const handleDownload = () => {
     if (!report?.markdown) return;
     const blob = new Blob([report.markdown], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
+    // Slugify the title so the filename is filesystem-safe.
     const safeTitle = (report.title || 'investigation-report')
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-');
@@ -24,10 +38,12 @@ export default function ReportModal({
     URL.revokeObjectURL(url);
   };
 
+  // Convert the LLM-generated markdown to HTML for preview.
   const htmlContent = report.markdown ? marked.parse(report.markdown) : '';
 
   return (
     <div className="modal-overlay" id="reportModal" onClick={onClose}>
+      {/* Stop propagation so clicks inside the card don't close it */}
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3 id="reportModalTitle">{report.title || "Investigation Report Preview"}</h3>
@@ -36,6 +52,7 @@ export default function ReportModal({
           </button>
         </div>
 
+        {/* Rendered markdown body (content originates from our own LLM) */}
         <div
           className="modal-body"
           id="reportModalBody"

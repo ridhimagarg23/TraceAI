@@ -1,3 +1,16 @@
+// constants.js
+// =============
+// Shared UI constants + tiny helpers for the TraceAI dashboard.
+//
+// The values here mirror the JSON contract produced by the backend
+// (backend/api.py / POST /analyze). Whenever you change the shape of
+// an API response, keep INITIAL_DASHBOARD_DATA in sync - the empty
+// state is what the dashboard renders before the first /analyze call.
+// -------------------------------------------------------------------
+
+// Full empty-state dashboard payload. Spreading this object into the
+// API response gives every panel a safe default shape so the UI never
+// crashes while waiting for real data.
 export const INITIAL_DASHBOARD_DATA = {
   session: {
     status: "Protected Session",
@@ -46,6 +59,8 @@ export const INITIAL_DASHBOARD_DATA = {
   report: null
 };
 
+// One-line behavioural summary shown per persona occupation in the
+// chat panel's summary card. Keys match getPersonaRoleKey() output.
 export const ROLE_SUMMARY_MAP = {
   student: "A young student profile. Displays curious and cautious digital behaviors, focusing on standard verification techniques.",
   graduate: "A recent graduate seeking remote job opportunities. Focused on gathering information before sharing personal details.",
@@ -57,6 +72,8 @@ export const ROLE_SUMMARY_MAP = {
   worker: "A part-time employee or worker. Hardworking, flexible, yet cautious about personal details and external claims."
 };
 
+// Rotating status lines shown in the "TraceAI is analyzing..." banner
+// while a request is in flight.
 export const THINKING_STEPS = [
   "Checking patterns...",
   "Extracting entities...",
@@ -64,6 +81,8 @@ export const THINKING_STEPS = [
   "Formulating undercover agent response..."
 ];
 
+// Maps an evidence item type to the trait icon shown in the overview.
+// NOTE: keep in sync with tools/entity_extractor.py IOC families.
 export const EV_ICON_MAP = {
   website: "globe",
   phone: "phone",
@@ -72,6 +91,9 @@ export const EV_ICON_MAP = {
   bank: "bank"
 };
 
+// Maps the backend's free-text occupation (e.g. "Working Professional")
+// to a fixed persona role key. The role key selects the avatar PNG
+// (frontend/public/assets/avatar_<role>.png) and the summary text.
 export function getPersonaRoleKey(occupation) {
   const occ = (occupation || '').toLowerCase();
   if (occ.includes('retired') || occ.includes('retiree') || occ.includes('senior')) return 'retiree';
@@ -85,11 +107,22 @@ export function getPersonaRoleKey(occupation) {
   return 'student';
 }
 
+// Uppercase-first helper for status labels ("pending" -> "Pending").
 export function cap(str) {
   if (!str) return 'Pending';
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
+// Wraps every IOC found inside a chat message in a coloured
+// <span class="ioc-highlight ..."> so analysts can spot indicators
+// at a glance. Runs on the client side AFTER the backend extracted
+// them server-side (tools/entity_extractor.py) - keep both sets of
+// regexes in sync.
+//
+// IMPORTANT: the return value is injected via dangerouslySetInnerHTML
+// (see ChatPanel). The input is analyst-pasted scam text - the regexes
+// only wrap text in spans and never execute it, but treat this as the
+// trust boundary it is.
 export function highlightIOCs(text) {
   if (!text) return "";
   const phonePattern = /(?:\+91[-\s]?)?[6-9]\d{9}/g;
@@ -98,6 +131,8 @@ export function highlightIOCs(text) {
   const urlPattern = /(?:https?:\/\/|www\.)[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?:\/[A-Za-z0-9\-._~:\/?#\[\]@!$&'()*+,;=%]*)?/g;
 
   let result = text;
+  // Order matters: longest matches first so a URL containing an email
+  // or phone-like tail is not split by the shorter patterns.
   result = result.replace(urlPattern, match => `<span class="ioc-highlight url">${match}</span>`);
   result = result.replace(emailPattern, match => `<span class="ioc-highlight email">${match}</span>`);
   result = result.replace(upiPattern, match => `<span class="ioc-highlight upi">${match}</span>`);

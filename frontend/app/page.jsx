@@ -1,3 +1,18 @@
+// page.jsx
+// =========
+// Root dashboard page ("use client" = client-side React).
+//
+// Responsibilities:
+//  * Session lifecycle - generate / reset the session_id and keep a
+//    session timer running.
+//  * State hub - owns the full dashboard payload (persona, chat,
+//    investigation, report) and distributes it to the panels.
+//  * API client - calls POST /analyze and POST /new on the backend,
+//    and merges the response into the dashboard state.
+//  * Cross-cutting UI - dark mode, thinking animation, error toast,
+//    report modal + the various "not implemented" stub actions.
+// -------------------------------------------------------------------
+
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -10,11 +25,15 @@ import ReportModal from '@/components/ReportModal';
 import ErrorToast from '@/components/ErrorToast';
 import { INITIAL_DASHBOARD_DATA, THINKING_STEPS } from '@/lib/constants';
 
+// Creates a unique id per investigation so backend sessions never
+// bleed into each other (Math.random is fine for UI ids).
 function generateSessionId() {
   return "session_" + Math.random().toString(36).substring(2, 11);
 }
 
 export default function DashboardPage() {
+  // Deep-clone of the empty-state payload (JSON clone breaks object
+  // references so no panel can mutate shared initial state).
   const [dashboardData, setDashboardData] = useState(() => JSON.parse(JSON.stringify(INITIAL_DASHBOARD_DATA)));
   const [sessionId, setSessionId] = useState(generateSessionId);
   const [isDark, setIsDark] = useState(false);
@@ -28,7 +47,10 @@ export default function DashboardPage() {
   const timerRef = useRef(null);
   const thinkingIntervalRef = useRef(null);
 
-  // Determine API base URL
+  // Determine API base URL:
+  // 1) NEXT_PUBLIC_API_URL (build-time override for deployments)
+  // 2) localhost:8001 when running in a local browser
+  // 3) the default hosted backend (Railway) fallback
   const getApiUrl = useCallback(() => {
     if (process.env.NEXT_PUBLIC_API_URL) {
       return process.env.NEXT_PUBLIC_API_URL.replace(/\/+$/, '');
@@ -42,7 +64,8 @@ export default function DashboardPage() {
     return 'https://traceai-backend-rg.up.railway.app';
   }, []);
 
-  // Timer logic
+  // Session timer: ticks every second while the dashboard is mounted
+  // (drives the "Running • MM:SS" readout in the top bar).
   useEffect(() => {
     timerRef.current = setInterval(() => {
       setTimerSeconds((prev) => prev + 1);
@@ -59,7 +82,8 @@ export default function DashboardPage() {
     return `Running • ${min}:${sec}`;
   };
 
-  // Dark mode effect
+  // Dark mode: toggling adds/removes the "dark" class on <body>;
+  // all colours are CSS variables that switch under that class.
   const handleToggleDark = () => {
     setIsDark((prev) => {
       const next = !prev;
@@ -74,7 +98,8 @@ export default function DashboardPage() {
     });
   };
 
-  // Thinking step cycling
+  // Thinking-step cycling: while a request is in flight, rotate the
+  // status text every 2 s to make the wait feel alive.
   useEffect(() => {
     if (isThinking) {
       let stepIdx = 0;
@@ -94,7 +119,7 @@ export default function DashboardPage() {
     };
   }, [isThinking]);
 
-  // Error toast auto-dismiss
+  // Error toast auto-dismiss after 5 s.
   useEffect(() => {
     if (errorMessage) {
       const t = setTimeout(() => {
@@ -104,7 +129,9 @@ export default function DashboardPage() {
     }
   }, [errorMessage]);
 
-  // Send message
+  // ---------------------------------------------------------------
+  // Core action: send one scammer message to POST /analyze
+  // ---------------------------------------------------------------
   const handleSendMessage = async (message) => {
     if (!message || isLoading) return;
 
@@ -114,7 +141,8 @@ export default function DashboardPage() {
 
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    // Optimistically add user message
+    // Optimistically append the pasted scammer line to the chat so
+    // the UI feels instant while the backend pipeline runs.
     setDashboardData((prev) => {
       const newMessages = [
         ...prev.messages,
@@ -145,6 +173,9 @@ export default function DashboardPage() {
 
       const data = await response.json();
 
+      // Merge the authoritative backend state over the optimistic UI:
+      // the response includes the *full* formatted message log, so it
+      // replaces (not appends to) prev.messages.
       setDashboardData((prev) => ({
         ...prev,
         ...data,
@@ -162,11 +193,15 @@ export default function DashboardPage() {
     }
   };
 
-  // Reset / New investigation
+  // ---------------------------------------------------------------
+  // Reset: clear backend session + regenerate the local state
+  // ---------------------------------------------------------------
   const handleNewInvestigation = async () => {
     setIsLoading(true);
     try {
       const apiUrl = getApiUrl();
+      // Best effort: backend session is cleared so a future /analyze
+      // with the SAME id starts fresh (we also rotate the id anyway).
       await fetch(`${apiUrl}/new`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -182,6 +217,8 @@ export default function DashboardPage() {
     setIsLoading(false);
     setErrorMessage(null);
   };
+
+  // ----- Stub actions (future features; keep UI reachable) -----
 
   const handleChangePersona = () => {
     alert("Undercover cover identity is configured automatically by the Adaptive Investigation Engine depending on threat context.");
@@ -215,7 +252,7 @@ export default function DashboardPage() {
 
   return (
     <>
-      {/* Sidebar */}
+      {/* Left rail: navigation + new case / report shortcuts */}
       <Sidebar
         onNewInvestigation={handleNewInvestigation}
         onGenerateReport={handleGenerateReport}
@@ -224,9 +261,9 @@ export default function DashboardPage() {
         onToggleDark={handleToggleDark}
       />
 
-      {/* Main Container */}
+      {/* Main content column */}
       <div className="main">
-        {/* Topbar */}
+        {/* Session header bar */}
         <Topbar
           session={dashboardData.session}
           liveTimerText={formatTimer()}
@@ -236,9 +273,9 @@ export default function DashboardPage() {
           onGenerateReport={handleGenerateReport}
         />
 
-        {/* 3-Panel Content Row */}
+        {/* 3-panel content row */}
         <div className="content-row">
-          {/* Left Panel: Persona */}
+          {/* Left: undercover persona card */}
           <PersonaPanel
             persona={dashboardData.persona}
             confidenceScore={dashboardData.investigation?.confidenceScore || 0}
@@ -246,7 +283,7 @@ export default function DashboardPage() {
             onViewPersona={handleViewPersona}
           />
 
-          {/* Center Panel: Live Undercover Chat */}
+          {/* Center: scammer <-> persona chat */}
           <ChatPanel
             messages={dashboardData.messages}
             persona={dashboardData.persona}
@@ -257,7 +294,7 @@ export default function DashboardPage() {
             onPasteTemplate={() => {}}
           />
 
-          {/* Right Panel: Investigation Overview */}
+          {/* Right: risk score / evidence / activity */}
           <OverviewPanel
             investigation={dashboardData.investigation}
             onViewAllActivity={() => alert("Viewing full chronological traces.")}
@@ -265,14 +302,13 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Report Modal */}
+      {/* Overlays */}
       <ReportModal
         isOpen={isReportOpen}
         report={dashboardData.report}
         onClose={() => setIsReportOpen(false)}
       />
 
-      {/* Error Toast */}
       <ErrorToast
         message={errorMessage}
         onClose={() => setErrorMessage(null)}
