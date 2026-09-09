@@ -54,7 +54,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://trace-ai-phi.vercel.app"
+        "https://trace-ai-phi.vercel.app",
     ],
     allow_credentials=False,
     allow_methods=["*"],
@@ -62,20 +62,7 @@ app.add_middleware(
 )
 
 
-# --------------------------------------------------
-# Explicit OPTIONS handler for /analyze
-# --------------------------------------------------
 
-@app.options("/analyze")
-def analyze_options():
-    return Response(
-        status_code=204,
-        headers={
-            "Access-Control-Allow-Origin": "https://trace-ai-phi.vercel.app",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type",
-        },
-    )
 
 
 # --------------------------------------------------
@@ -339,6 +326,10 @@ def health():
         "status": "healthy"
     }
 
+@app.options("/new")
+def new_options():
+    logger.info("Received OPTIONS request for /new preflight")
+    return {"status": "ok"}
 
 @app.post("/new")
 def new_investigation(request: Dict[str, str]):
@@ -357,6 +348,10 @@ def new_investigation(request: Dict[str, str]):
         "message": f"Session '{session_id}' successfully reset."
     }
 
+@app.options("/analyze")
+def analyze_options():
+    logger.info("Received OPTIONS request for /analyze preflight")
+    return {"status": "ok"}
 
 @app.post("/analyze")
 def analyze(request: InvestigationRequest):
