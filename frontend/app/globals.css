@@ -2174,3 +2174,140 @@ body.dark .bsb-text {
     transform: scale(1);
   }
 }
+
+/* ═══════════════════════════════════════════
+   RESPONSIVE DESIGN MEDIA QUERIES
+   ═══════════════════════════════════════════ */
+
+/* --- 1024px to 1280px (Laptop/Tablet Landscape) --- */
+@media (max-width: 1280px) {
+  .persona-panel {
+    width: 200px;
+    min-width: 200px;
+  }
+  .overview-panel {
+    width: 260px;
+    min-width: 260px;
+  }
+  .sidebar {
+    width: 200px;
+    min-width: 200px;
+  }
+}
+
+/* --- 768px to 1024px (Tablet Portrait) --- */
+@media (max-width: 1024px) {
+  .content-row {
+    gap: 12px;
+    padding: 12px;
+  }
+  .sidebar {
+    width: 180px;
+    min-width: 180px;
+  }
+  .persona-panel {
+    width: 180px;
+    min-width: 180px;
+  }
+  .overview-panel {
+    width: 240px;
+    min-width: 240px;
+  }
+}
+
+/* --- Max 768px (Tablet/Mobile) --- */
+@media (max-width: 768px) {
+  body {
+    flex-direction: column;
+    height: auto;
+    min-height: 100vh;
+    overflow-y: auto;
+  }
+  
+  .sidebar {
+    width: 100%;
+    min-width: 100%;
+    height: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  
+  .sidebar .logo {
+    margin-bottom: 0;
+  }
+  
+  .btn-new {
+    width: auto;
+    margin-bottom: 0;
+  }
+  
+  .sidebar .nav-item {
+    display: none; /* Hide nav links on mobile to save space */
+  }
+  
+  .sidebar-footer {
+    display: none;
+  }
+  
+  .main {
+    overflow: visible;
+    flex: auto;
+  }
+  
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+    height: auto;
+    gap: 12px;
+  }
+  
+  .topbar-left, .topbar-right {
+    justify-content: space-between;
+  }
+  
+  .content-row {
+    flex-direction: column;
+    overflow: visible;
+  }
+  
+  .persona-panel,
+  .chat-panel,
+  .overview-panel {
+    width: 100%;
+    min-width: 100%;
+    height: auto;
+  }
+  
+  .chat-panel {
+    min-height: 500px;
+  }
+}
+
+/* --- Max 480px (Small Mobile) --- */
+@media (max-width: 480px) {
+  .topbar-actions {
+    flex-wrap: wrap;
+  }
+  
+  .msg-bubble {
+    max-width: 100%;
+  }
+  
+  .chat-input-row {
+    flex-wrap: wrap;
+  }
+  
+  #chatInput {
+    width: 100%;
+  }
+  
+  .btn-send {
+    width: 100%;
+    justify-content: center;
+  }
+}
