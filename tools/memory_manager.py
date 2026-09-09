@@ -12,9 +12,12 @@ class MemoryManager:
 
     def __init__(self):
 
-        self.memory_file = Path(
-            "database/threat_memory.json"
-        )
+        # Resolve relative to the repository root (tools is one level deep)
+        project_root = Path(__file__).resolve().parent.parent
+        self.memory_file = project_root / "database" / "threat_memory.json"
+
+        # Create the database directory automatically if it doesn't exist
+        self.memory_file.parent.mkdir(parents=True, exist_ok=True)
 
         if not self.memory_file.exists():
 
