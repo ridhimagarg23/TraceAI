@@ -1,3 +1,16 @@
+"""
+test_adaptive_investigation_engine.py
+=====================================
+Offline unit tests for the deterministic Adaptive Investigation
+Engine (persona profile selection + objective-ladder progression).
+
+No mocks and no network: the engine is pure rule-based logic.
+
+Run with:
+
+    OPENROUTER_API_KEY=test-key python -m unittest discover -s tests
+"""
+
 import unittest
 from tools.adaptive_investigation_engine import AdaptiveInvestigationEngine, InvestigationState
 
@@ -5,8 +18,12 @@ from tools.adaptive_investigation_engine import AdaptiveInvestigationEngine, Inv
 class TestAdaptiveInvestigationEngine(unittest.TestCase):
 
     def test_engine_flow(self):
+        """
+        initialize() must produce a stateful engine whose update()
+        advances the turn counter and refreshes objective/strategy.
+        """
         engine = AdaptiveInvestigationEngine()
-        
+
         # Test initialization
         state = engine.initialize("Banking Phishing")
         self.assertIsInstance(state, InvestigationState)

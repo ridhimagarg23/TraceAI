@@ -1,7 +1,16 @@
 """
 app.py
-
+======
 TraceAI CLI Application
+
+Runs a single-pass investigation from the terminal - handy for quick
+manual testing of a message without starting the API server:
+
+    export OPENROUTER_API_KEY=...
+    python app.py
+
+Flow: investigate the pasted message -> build the persona state ->
+save to memory -> generate the honeypot reply -> print a report.
 """
 
 from agents.investigation_agent import InvestigationAgent
@@ -23,12 +32,16 @@ def main():
     print(" TraceAI - AI Scam Investigation Platform ")
     print("=" * 60)
 
+    # -------------------------------------------------
+    # 1. Ask the analyst for the raw scammer payload
+    # -------------------------------------------------
+
     message = input(
         "\nPaste suspicious message:\n\n"
     )
 
     # ---------------------------------
-    # Investigation
+    # 2. Investigation: verdict + IOCs + risk score
     # ---------------------------------
 
     investigation = InvestigationAgent().run(
@@ -36,7 +49,8 @@ def main():
     )
 
     # ---------------------------------
-    # Adaptive Investigation Engine
+    # 3. Adaptive Investigation Engine:
+    #    pick persona profile + first objective/strategy
     # ---------------------------------
 
     engine = AdaptiveInvestigationEngine()
@@ -46,7 +60,7 @@ def main():
     )
 
     # ---------------------------------
-    # Conversation Session
+    # 4. Conversation Session: record the scammer message
     # ---------------------------------
 
     session = ConversationSession()
@@ -56,7 +70,7 @@ def main():
     )
 
     # ---------------------------------
-    # Save Investigation
+    # 5. Persist the investigation into threat memory
     # ---------------------------------
 
     memory = MemoryManager()
@@ -66,7 +80,7 @@ def main():
     )
 
     # ---------------------------------
-    # Conversation
+    # 6. Conversation: generate the persona's reply
     # ---------------------------------
 
     conversation = ConversationAgent().run(
@@ -81,7 +95,7 @@ def main():
     )
 
     # ---------------------------------
-    # Report
+    # 7. Report: compile the markdown investigation report
     # ---------------------------------
 
     report = ReportAgent().run(
@@ -90,7 +104,7 @@ def main():
     )
 
     # ---------------------------------
-    # Output
+    # 8. Print the complete output
     # ---------------------------------
 
     print("\n" + "=" * 60)

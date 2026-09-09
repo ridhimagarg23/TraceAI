@@ -1,5 +1,20 @@
+/* globals.css
+   ===========
+   Single global stylesheet for the TraceAI dashboard (no CSS
+   modules - one design system, one file).
+
+   Section order:
+   1. Design tokens (CSS variables: light + dark themes)
+   2. Reset & base element styles
+   3. Layout scaffolding (.sidebar / .main / .topbar / .content-row)
+   4. Per-panel styles (Persona / Chat / Overview + modals)
+   5. Utilities (.text-brand, .mb-2, ioc-highlight, badges)
+*/
+
 /* ═══════════════════════════════════════════
-   RESET & SYSTEM VARIABLE TOKENS
+   1. DESIGN TOKENS & RESET
+   Light theme = :root defaults; the .dark class
+   on <body> overrides the same variables below.
    ═══════════════════════════════════════════ */
 *,
 *::before,
@@ -104,8 +119,9 @@ body {
 }
 
 /* ═══════════════════════════════════════════
-   SIDEBAR
+   3. LAYOUT: SIDEBAR / TOPBAR / CONTENT ROW
    ═══════════════════════════════════════════ */
+/* ── SIDEBAR ── */
 .sidebar {
   width: var(--sidebar-w);
   min-width: var(--sidebar-w);
@@ -356,9 +372,7 @@ body.dark .nav-item:hover {
   transform: translateX(16px);
 }
 
-/* ═══════════════════════════════════════════
-   MAIN CONTAINER & HEADER
-   ═══════════════════════════════════════════ */
+/* ── MAIN CONTAINER & TOPBAR ── */
 .main {
   flex: 1;
   display: flex;
@@ -568,7 +582,7 @@ body.dark .nav-item:hover {
 }
 
 /* ═══════════════════════════════════════════
-   CONTENT ROW & PANELS
+   4. CONTENT ROW & PANELS
    ═══════════════════════════════════════════ */
 .content-row {
   display: flex;
@@ -2116,6 +2130,9 @@ body.dark .bsb-text {
   background: var(--card);
 }
 
+/* ═══════════════════════════════════════════
+   5. OVERLAYS, TOAST & UTILITY ANIMATIONS
+   ═══════════════════════════════════════════ */
 /* ERROR TOAST */
 .error-toast {
   position: fixed;

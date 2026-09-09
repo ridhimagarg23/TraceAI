@@ -1,7 +1,15 @@
 """
 report_agent.py
+===============
+AI Report Generator (step 5 of the pipeline).
 
-Generates a professional investigation report.
+Compiles the accumulated investigation facts plus the honeypot
+dialogue into a polished, analyst-ready markdown report with the
+standard sections (executive summary, threat type, risk assessment,
+IOCs, findings, conversation summary, recommended actions).
+
+The returned ReportResult is stored on the API session and rendered
+in the dashboard's report modal (markdown -> HTML on the client).
 """
 
 from llm.llm_client import LLMClient
@@ -18,6 +26,7 @@ from utils.schemas import (
 class ReportAgent:
 
     def __init__(self):
+        """Load the LLM client and the report prompt template."""
 
         self.llm = LLMClient()
 
@@ -30,6 +39,34 @@ class ReportAgent:
         investigation: InvestigationResult,
         conversation: ConversationResult
     ) -> ReportResult:
+        """
+        Generate the investigation report.
+
+        Parameters
+        ----------
+        investigation : InvestigationResult
+            The accumulated case: verdict, IOCs, risk score/level,
+            detected indicators and recommendations.
+        conversation : ConversationResult
+            The persona reply produced this turn plus its objective /
+            expected outcome (quoted in the honeypot summary section).
+
+        Returns
+        -------
+        ReportResult
+            ``title`` + ``markdown`` body.
+
+        Raises
+        ------
+        ValueError
+            If the LLM output is missing any required key.
+        """
+
+        # ----------------------------------------------------------
+        # Build the prompt: system rules + all facts the report is
+        # allowed to mention. The prompt forbids inventing details,
+        # so the report is always traceable to real evidence.
+        # ----------------------------------------------------------
 
         final_prompt = f"""
 {self.prompt}
@@ -90,6 +127,10 @@ Return ONLY valid JSON.
             final_prompt,
             json_output=True
         )
+
+        # ----------------------------
+        # Validate LLM Response
+        # ----------------------------
 
         required_keys = [
             "title",

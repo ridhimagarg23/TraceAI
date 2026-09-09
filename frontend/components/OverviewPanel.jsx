@@ -1,3 +1,16 @@
+// OverviewPanel.jsx
+// ==================
+// Right panel: real-time investigation readouts.
+//
+//  * Threat level badge + animated risk-score gauge (SVG ring)
+//  * Confidence score bar
+//  * 5-step investigation progress stepper
+//  * Evidence tracker (IOCs collected per family)
+//  * Recent activity timeline
+//
+// Data source: dashboardData.investigation (backend POST /analyze).
+// -------------------------------------------------------------------
+
 import React, { useState, useEffect } from 'react';
 import { CheckIcon, SearchIcon, LockIcon, ChevronIcon, DynamicEvidenceIcon } from './Icons';
 import { cap } from '@/lib/constants';
@@ -17,7 +30,10 @@ export default function OverviewPanel({
     activity = []
   } = investigation;
 
-  // Animated risk score counter & gauge
+  // ---------------------------------------------------------------
+  // Animated risk-score counter: counts up/down to the target value
+  // with an adaptive tick rate (snappier for big jumps).
+  // ---------------------------------------------------------------
   const [displayScore, setDisplayScore] = useState(0);
 
   useEffect(() => {
@@ -42,7 +58,8 @@ export default function OverviewPanel({
     return () => clearInterval(timer);
   }, [riskScore]);
 
-  // Risk badge styles
+  // Risk badge colours by level (fall back to green/success style
+  // for non-threatening or unknown states).
   const rLevel = (riskLevel || '').toUpperCase();
   let badgeStyle = {
     background: 'var(--success-bg)',
@@ -63,17 +80,21 @@ export default function OverviewPanel({
     };
   }
 
-  // Severity badge style
+  // Severity pill styles (Critical / High / Medium / None)
   const showSeverity = threatSeverity && threatSeverity !== 'None';
   let sevClass = 'badge-success';
   if (threatSeverity?.toLowerCase() === 'critical') sevClass = 'badge-critical';
   else if (threatSeverity?.toLowerCase() === 'high') sevClass = 'badge-warning';
 
-  // Gauge circumference
+  // ---------------------------------------------------------------
+  // Gauge math: SVG circle radius 15.9 -> circumference ~99.9 units.
+  // strokeDasharray shows the filled arc proportional to the score.
+  // ---------------------------------------------------------------
   const circumference = 2 * Math.PI * 15.9; // ~99.9
   const filled = (displayScore / 100) * circumference;
   const strokeDash = `${filled.toFixed(1)} ${(circumference - filled).toFixed(1)}`;
 
+  // Stepper icons per state.
   const stepIcons = {
     done: <CheckIcon style={{ width: 11, height: 11 }} />,
     current: <SearchIcon style={{ width: 11, height: 11 }} />,
@@ -82,6 +103,7 @@ export default function OverviewPanel({
 
   return (
     <div className="overview-panel" id="overviewPanel">
+      {/* ============ Header ============ */}
       <div className="overview-head">
         <h3>Investigation Overview</h3>
         <span className="risk-badge-pill" id="riskBadge" style={badgeStyle}>
@@ -89,7 +111,7 @@ export default function OverviewPanel({
         </span>
       </div>
 
-      {/* Risk Card */}
+      {/* ============ Risk card (level + gauge) ============ */}
       <div className="risk-card">
         <div className="risk-card-left">
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -122,9 +144,12 @@ export default function OverviewPanel({
           </div>
         </div>
 
+        {/* SVG ring gauge */}
         <div className="gauge-wrap">
           <svg viewBox="0 0 36 36">
+            {/* Track (grey full ring) */}
             <circle cx="18" cy="18" r="15.9" fill="none" stroke="var(--border-light)" strokeWidth="3" />
+            {/* Filled arc (progress proportion of the ring) */}
             <circle
               id="gaugeArc"
               cx="18"
@@ -138,6 +163,7 @@ export default function OverviewPanel({
               style={{ transition: 'stroke-dasharray 0.3s ease' }}
             />
           </svg>
+          {/* Score in the middle of the ring */}
           <div className="gauge-score">
             <span id="riskScore">{displayScore}</span>
             <span className="gauge-unit">/100</span>
@@ -147,7 +173,7 @@ export default function OverviewPanel({
 
       <hr className="section-divider" />
 
-      {/* Confidence */}
+      {/* ============ Confidence bar ============ */}
       <div className="info-block">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span className="info-sub-label">Confidence Score</span>
@@ -160,16 +186,18 @@ export default function OverviewPanel({
 
       <hr className="section-divider" />
 
-      {/* Progress Steps */}
+      {/* ============ Progress stepper ============ */}
       <div>
         <div className="section-label mb-2">Investigation Progress</div>
         <div className="progress-steps" id="progressSteps">
+          {/* Connector line behind the circles */}
           <div className="steps-line" />
           {progress?.map((s, idx) => (
             <div className={`step ${s.state}`} key={idx}>
               <div className="step-circle">
                 {stepIcons[s.state] || stepIcons.locked}
               </div>
+              {/* Label with manual line break (backend sends \n) */}
               <div
                 className="step-name"
                 dangerouslySetInnerHTML={{ __html: s.label.replace('\n', '<br>') }}
@@ -181,7 +209,7 @@ export default function OverviewPanel({
 
       <hr className="section-divider" />
 
-      {/* Evidence Tracker */}
+      {/* ============ Evidence tracker ============ */}
       <div>
         <div className="section-label mb-2">Evidence Tracker</div>
         <div className="evidence-list" id="evidenceList">
@@ -189,6 +217,8 @@ export default function OverviewPanel({
             <p style={{ color: 'var(--text-4)', fontSize: 11.5, padding: 5 }}>No indicators found.</p>
           ) : (
             evidence.map((item, idx) => {
+              // Pending rows show only the family name; collected /
+              // verified rows carry "Type: value" and get split.
               let displayTitle = item.type?.toUpperCase() || 'EVIDENCE';
               let displayValue = 'Pending';
               if (item.status === 'collected' || item.status === 'verified') {
@@ -229,10 +259,11 @@ export default function OverviewPanel({
 
       <hr className="section-divider" />
 
-      {/* Recent Activity */}
+      {/* ============ Recent activity ============ */}
       <div>
         <div className="activity-head mb-2">
           <div className="section-label">Recent Activity</div>
+          {/* Full trace viewer is a future feature (alert stub) */}
           <button className="view-all-btn" onClick={onViewAllActivity} type="button">
             View All
           </button>
